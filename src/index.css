@@ -1,0 +1,402 @@
+:root {
+  --bg: #f7f8f4;
+  --surface: #ffffff;
+  --surface-alt: #f0f3ec;
+  --border: #e1e6db;
+  --border-strong: #cbd3c2;
+
+  --text: #1f2a22;
+  --text-muted: #6e786a;
+  --text-faint: #98a092;
+
+  --accent: #3f6b4a;
+  --accent-strong: #2e5138;
+  --accent-soft: #e6efe4;
+  --accent-soft-strong: #cfe0cc;
+
+  --pin: #a67c2e;
+  --pin-soft: #f5edd9;
+
+  --danger: #a8483c;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --shadow-sm: 0 1px 2px rgba(31, 42, 34, 0.06);
+  --shadow-md: 0 8px 28px rgba(31, 42, 34, 0.14);
+
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+/* --- Buttons --- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.btn:hover {
+  background: var(--surface-alt);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.btn-primary:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+.btn-ghost:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.btn-sm {
+  padding: 3px 9px;
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.icon-btn:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+.icon-btn.is-favorite {
+  color: var(--danger);
+}
+.icon-btn.is-pinned {
+  color: var(--pin);
+  background: var(--pin-soft);
+}
+.icon-btn.is-playing {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.icon-btn.is-active {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+/* --- Session title button (the always-visible session header) --- */
+
+.session-title-btn {
+  background: none;
+}
+.session-title-btn:hover,
+.session-title-btn.is-open {
+  background: var(--surface-alt);
+}
+
+/* --- Inputs --- */
+
+.input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.input::placeholder {
+  color: var(--text-faint);
+}
+
+.search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.search-field svg {
+  position: absolute;
+  left: 9px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+.search-field .input {
+  padding-left: 28px;
+  width: 100%;
+}
+
+/* --- Nav pills --- */
+
+.nav-pill {
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.nav-pill:hover {
+  background: var(--surface-alt);
+}
+.nav-pill.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+
+/* --- Panels / surfaces --- */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(31, 42, 34, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.modal-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 16px;
+}
+
+/* --- Labels / text hierarchy --- */
+
+.section-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+.text-faint {
+  color: var(--text-faint);
+}
+
+/* --- Rows / lists --- */
+
+.row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s ease;
+}
+.row:hover {
+  background: var(--surface-alt);
+}
+.row.is-playing {
+  background: var(--accent-soft);
+}
+
+.row-header {
+  display: flex;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-strong);
+  padding: 8px 0;
+}
+
+/* --- Chips --- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text);
+}
+.chip.is-selected {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-strong);
+  color: var(--accent-strong);
+}
+
+/* --- Segmented toggle (e.g. List / Folders on All samples) --- */
+
+.segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface-alt);
+  border-radius: 999px;
+  padding: 2px;
+}
+.segmented button {
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.segmented button.is-active {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+/* --- Inline type tag (row-level "what is this", from filename/folder
+   classification — deliberately quiet, a confirmation not a headline) --- */
+
+.type-tag {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  background: var(--surface-alt);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+/* --- Sidebar tree --- */
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.tree-item:hover {
+  background: var(--surface-alt);
+}
+.tree-item.is-focused {
+  background: var(--accent-soft);
+}
+.tree-children {
+  border-left: 1px solid var(--border);
+  margin-left: 10px;
+}
+
+/* --- Scrollbars (thin always, a little more visible on hover) --- fully
+   invisible until hover looked cleaner, but on a short list it just reads
+   as "this is broken / cut off" — there's no hint anything exists below the
+   fold until you happen to hover exactly the right spot. A faint, thin
+   thumb by itself is enough to say "there's more, scroll here" without
+   turning into the old chunky OS scrollbar. */
+
+.scroll-area {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--border) transparent;
+}
+.scroll-area:hover {
+  scrollbar-color: var(--border-strong) transparent; /* Firefox */
+}
+.scroll-area::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+.scroll-area::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+}
+.scroll-area:hover::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+}
+.scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* The Sound type chips: previously a horizontally-scrolling single row with
+   no visible scrollbar, which is exactly why it read as "clipped" in a
+   narrower window — there was no affordance at all hinting the rest could
+   be reached, chips just ended at the edge. Wrapping instead means every
+   chip is always reachable without needing to discover a hidden scroll
+   area, at the cost of the row growing taller in a narrow window — an
+   explicit tradeoff in favor of nothing ever being hidden. */
+.chip-row {
+  flex-wrap: wrap;
+}
+.chip-row .chip {
+  white-space: nowrap;
+}
