@@ -88,6 +88,17 @@ The app has a lot of features: sessions, packs, tags, hiding, pins, favorites, a
 - **Hearts stay manual.** "In project" is a fact about one beat. "Keeper" is a judgment about your taste, so the app records facts and leaves judgments to you.
 - **Pins:** consider. **Drags:** try. **Hearts:** keep. Each step is a bigger commitment, and only the last one carries across sessions.
 
+## 6. Projects tab (experiment, `projects-tab` branch)
+
+**What I noticed:** After linking sets, I wanted one place to answer "what did I actually use in that beat?", even after switching to a different session.
+
+**What I added:** a **Projects** tab next to All samples and Favorites. Each beat (a session with a linked Ableton set or any dragged samples) is listed in the sidebar with "2 in project · 1 tried". Click one to see its **In project** samples first, then everything else you tried. The pack column still opens the source pack, so the sidestep works from here too.
+
+**Decisions:**
+- **Not auto-hearting.** Hearts stay "I love this." "Used in a project" is its own view.
+- **No new folders on disk.** Projects are virtual. Each session remembers the samples found in its last saved set, so the tab works after you switch sessions.
+- **Kept on its own branch** to test whether a separate tab is the right workflow, or whether this should live inside Favorites.
+
 ---
 
 ## Tab structure: should Favorites be its own tab?

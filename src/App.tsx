@@ -10,6 +10,7 @@ import { CategoryFilterBar } from './components/CategoryFilterBar'
 import { SessionBar } from './components/SessionBar'
 import { PackMenu } from './components/PackMenu'
 import { TriedTray } from './components/TriedTray'
+import { ProjectsSidebar } from './components/ProjectsSidebar'
 import { ArrowLeftIcon, BrandMark, ChevronIcon, FolderIcon, PencilIcon, SearchIcon, ShuffleIcon } from './components/Icon'
 
 const ROW_HEIGHT = 40
@@ -140,7 +141,13 @@ export default function App() {
 
   const togglePin = useCallback((sample: ScannedSample) => lib.togglePin(sample.id), [lib])
 
-  const triedSet = useMemo(() => new Set(lib.tried), [lib.tried])
+  // In the Projects tab, row marks describe the SELECTED project, not
+  // whichever session happens to be open.
+  const inProjectsTab = lib.browse.scope === 'projects'
+  const selTried = lib.selectedProject?.tried
+  const selIn = lib.selectedProject?.inProject
+  const triedSet = useMemo(() => new Set(inProjectsTab ? selTried ?? [] : lib.tried), [inProjectsTab, selTried, lib.tried])
+  const inProjectSet = useMemo(() => (inProjectsTab ? new Set(selIn ?? []) : lib.inProject), [inProjectsTab, selIn, lib.inProject])
   const rowData: RowData = {
     items: lib.browseItems,
     playingId,
@@ -153,7 +160,7 @@ export default function App() {
     onTogglePin: togglePin,
     onOpenPack: lib.openPack,
     tried: triedSet,
-    inProject: lib.inProject,
+    inProject: inProjectSet,
     nameMatchOnly: lib.nameMatchOnly,
     onDragged: lib.recordDrag,
   }
@@ -166,14 +173,17 @@ export default function App() {
   const showSidebar =
     lib.browse.scope === 'pack' ||
     (lib.browse.scope === 'session' && !sessionIsEmpty) ||
-    (lib.browse.scope === 'all' && showAllSamplesFolders)
+    (lib.browse.scope === 'all' && showAllSamplesFolders) ||
+    (lib.browse.scope === 'projects' && lib.projects.length > 0)
 
   const sidebarRootLabel =
     lib.browse.scope === 'session'
       ? 'All session samples'
       : lib.browse.scope === 'all'
         ? 'All samples'
-        : undefined
+        : lib.browse.scope === 'projects'
+          ? lib.selectedProject?.name
+          : undefined
 
   // Session packs gets its own sidebar header: the count plus the two pack
   // actions (Shuffle, Edit packs) grouped right where the packs themselves
@@ -216,6 +226,8 @@ export default function App() {
       ? 'Search session packs…'
       : lib.browse.scope === 'favorites'
         ? 'Search favorites…'
+        : lib.browse.scope === 'projects'
+          ? 'Search this project…'
         : 'Search all samples…'
 
   const sampleCount = lib.browseItems.filter((i) => i.kind === 'sample').length
@@ -374,6 +386,13 @@ export default function App() {
               Favorites ({lib.favorites.size})
             </button>
             <button
+              className={`nav-pill${lib.browse.scope === 'projects' ? ' is-active' : ''}`}
+              onClick={() => lib.setScope('projects')}
+              title="Samples you used in each beat: In project first, then everything you tried"
+            >
+              Projects ({lib.projects.length})
+            </button>
+            <button
               className={`nav-pill${lib.browse.scope === 'session' ? ' is-active' : ''}`}
               onClick={() => lib.setScope('session')}
             >
@@ -513,7 +532,14 @@ export default function App() {
               </div>
             ) : (
               <>
-                {showSidebar && (
+                {showSidebar && lib.browse.scope === 'projects' ? (
+                  <ProjectsSidebar
+                    projects={lib.projects}
+                    selectedId={lib.selectedProject?.id}
+                    activeSessionId={lib.activeSessionId}
+                    onSelect={lib.selectProject}
+                  />
+                ) : showSidebar && (
                   <PackTreeSidebar
                     packs={lib.sidebarPacks}
                     packTrees={lib.packTrees}
@@ -535,6 +561,12 @@ export default function App() {
               {/* Empty states that route forward instead of dead-ending.
                   (Session's zero-pack case gets its own full-width state
                   above, replacing this whole row instead.) */}
+              {lib.browse.scope === 'projects' && lib.projects.length === 0 && (
+                <p className="text-muted">
+                  No projects yet. Drag a sample into Ableton, or use “Link Ableton set…” next to the session name, and the beat shows up here.
+                </p>
+              )}
+
               {lib.browse.scope === 'favorites' && lib.favorites.size === 0 && (
                 <p className="text-muted">
                   No favorites yet.{' '}

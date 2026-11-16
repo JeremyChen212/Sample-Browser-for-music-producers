@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PackTag, SampleCategory, SavedSession, ScannedSample, StoreShape } from '../../electron/preload'
 
-export type Scope = 'all' | 'favorites' | 'session' | 'pack'
+export type Scope = 'all' | 'favorites' | 'session' | 'pack' | 'projects'
 export type Format = 'loop' | 'oneshot'
 
 // The type-filter row shows these up front; Cymbal/Perc/Unclassified live in
@@ -49,6 +49,8 @@ export interface BrowseState {
   // undefined category = no type filter applied; undefined format = any.
   category?: SampleCategory
   format?: Format
+  // Projects tab: which session/beat is selected in its sidebar.
+  projectId?: string
 }
 
 export interface PackInfo {
@@ -621,7 +623,13 @@ export function useLibrary() {
         return
       }
       setProjectStatus({ name: res.name })
-      setInProject(new Set((res.found ?? []).map((p) => pathToId.get(p)!).filter(Boolean)))
+      const foundIds = (res.found ?? []).map((p) => pathToId.get(p)!).filter(Boolean)
+      setInProject(new Set(foundIds))
+      // Remember what was found, so the Projects tab still shows this beat's
+      // samples after you switch to another session. Only writes on change.
+      const key = [...foundIds].sort().join('|')
+      const prevKey = [...(activeSession?.projectSamples ?? [])].sort().join('|')
+      if (key !== prevKey) updateActiveSessionField(() => ({ projectSamples: foundIds }))
       setNameMatchOnly(new Set((res.nameOnly ?? []).map((p) => pathToId.get(p)!).filter(Boolean)))
     }
     run()
@@ -818,6 +826,29 @@ export function useLibrary() {
     setBrowse((b) => ({ scope: 'session', query: b.query, category: b.category, format: b.format }))
   }, [])
 
+  // --- Projects tab ---
+  // Workflow note: I wanted one place to see "what did I actually use in that
+  // beat?" without hearting things by hand. Every session that has a linked
+  // Ableton set or any dragged samples shows up here as a project: its
+  // "In project" samples first, then everything else I tried. Nothing on disk
+  // is copied; clicking a pack name still sidesteps into the source pack.
+  const projects = useMemo(
+    () =>
+      sessions
+        .filter((s) => s.alsPath || (s.tried ?? []).length > 0)
+        .map((s) => ({
+          id: s.id,
+          name: s.name,
+          setName: s.alsPath ? s.alsPath.split('/').pop() : undefined,
+          inProject: s.id === activeSessionId && s.alsPath ? Array.from(inProject) : s.projectSamples ?? [],
+          tried: s.tried ?? [],
+        }))
+        .sort((a, b) => (a.id === activeSessionId ? -1 : b.id === activeSessionId ? 1 : 0)),
+    [sessions, activeSessionId, inProject],
+  )
+  const selectedProject = projects.find((p) => p.id === browse.projectId) ?? projects[0]
+  const selectProject = useCallback((id: string) => setBrowse((b) => ({ ...b, projectId: id })), [])
+
   // For All/Favorites/Session-unfocused: a flat, searchable list — those
   // views intentionally cut across many packs, where one vendor's folder
   // hierarchy doesn't mean anything shared. For any focused pack (whether
@@ -856,6 +887,19 @@ export function useLibrary() {
         .filter(passesType)
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((sample) => ({ kind: 'sample' as const, sample }))
+    } else if (browse.scope === 'projects') {
+      // "In project" samples first, then the rest of what was tried.
+      const p = projects.find((x) => x.id === browse.projectId) ?? projects[0]
+      const ids = p ? [...p.inProject, ...p.tried.filter((t) => !p.inProject.includes(t))] : []
+      const list: BrowseItem[] = []
+      for (const id of ids) {
+        const sample = samplesById.get(id)
+        if (!sample) continue
+        if (q && !sample.name.toLowerCase().includes(q)) continue
+        tally(sample)
+        if (passesType(sample)) list.push({ kind: 'sample', sample })
+      }
+      items = list
     } else if (browse.scope === 'favorites') {
       // Unlike the other flat scopes, Favorites can reference samples that
       // aren't in the current scan (moved file, or a smaller folder chosen
@@ -891,7 +935,7 @@ export function useLibrary() {
     }
 
     return { browseItems: items, categoryCounts: counts, formatCounts: fCounts }
-  }, [samples, samplesById, browse, favorites, sessionPackPaths])
+  }, [samples, samplesById, browse, favorites, sessionPackPaths, projects])
 
   const currentPackName = useMemo(() => {
     if (!browse.packPath) return null
@@ -991,6 +1035,9 @@ export function useLibrary() {
     setFormat,
     searchAll,
     searchSessionWide,
+    projects,
+    selectedProject,
+    selectProject,
     browseItems,
     categoryCounts,
     formatCounts,

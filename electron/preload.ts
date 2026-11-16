@@ -45,6 +45,9 @@ export interface SavedSession {
   // The Ableton set this session is for, if linked. Lets the app mark tried
   // samples as "In project" whenever that set is saved.
   alsPath?: string
+  // Samples found in the linked set's last save, remembered so the Projects
+  // tab can show them even when this session isn't the one that's open.
+  projectSamples?: string[]
 }
 
 export interface AlsCheckResult {

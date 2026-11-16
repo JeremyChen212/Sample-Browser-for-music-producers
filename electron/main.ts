@@ -30,6 +30,7 @@ interface SavedSession {
   // (.als) this session is linked to — see preload.ts for the reasoning.
   tried?: string[]
   alsPath?: string
+  projectSamples?: string[]
 }
 
 interface StoreShape {
