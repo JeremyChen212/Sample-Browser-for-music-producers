@@ -14,6 +14,10 @@ interface Props {
   onDuplicate: (id: string) => void
   onDelete: (id: string) => void
   onRetry: () => void
+  // Ableton set link for this session (one beat = one session = one set).
+  projectStatus: { name: string; error?: string } | null
+  onLinkSet: () => void
+  onUnlinkSet: () => void
 }
 
 // One always-visible header: which session you're in, that it's autosaving,
@@ -35,6 +39,9 @@ export function SessionBar({
   onDuplicate,
   onDelete,
   onRetry,
+  projectStatus,
+  onLinkSet,
+  onUnlinkSet,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -203,6 +210,31 @@ export function SessionBar({
               Retry
             </button>
           </>
+        )}
+      </span>
+
+      {/* Lives next to the session name because a session IS a beat — the
+          set it's linked to is part of its identity, not a global setting. */}
+      <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'center' }}>
+        {projectStatus ? (
+          <>
+            <span className={`set-link${projectStatus.error ? ' is-error' : ''}`} title={projectStatus.error ?? 'Samples in this set\'s last save are marked "In project"'}>
+              <span className="set-link-dot" />
+              {projectStatus.name}
+              {projectStatus.error && ` · ${projectStatus.error}`}
+            </span>
+            <button className="btn btn-ghost btn-sm" onClick={onUnlinkSet}>
+              Unlink
+            </button>
+          </>
+        ) : (
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={onLinkSet}
+            title="Pick this beat's Ableton set (.als). Samples you drag in get marked “In project” whenever you save it."
+          >
+            Link Ableton set…
+          </button>
         )}
       </span>
 

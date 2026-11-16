@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
+import zlib from 'node:zlib'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 const DIST = path.join(__dirname, '../dist')
@@ -25,6 +26,10 @@ interface SavedSession {
   packPaths: string[]
   pinned: string[]
   updatedAt: number
+  // Samples dragged into Ableton during this session, and the Ableton set
+  // (.als) this session is linked to — see preload.ts for the reasoning.
+  tried?: string[]
+  alsPath?: string
 }
 
 interface StoreShape {
@@ -474,12 +479,77 @@ app.whenReady().then(() => {
     event.sender.startDrag({ file: filePath, icon })
   })
 
+  // --- Ableton set link ("is this sample still in my project?") ---
+  //
+  // Workflow note: I didn't want to come back to the app after every beat
+  // just to heart the samples that made it. Full .als parsing didn't land in
+  // the original 3-hour build, but this needs far less: an .als file is
+  // gzip-compressed XML, and every sample a set uses is stored with its
+  // file path. So we decompress and look for the exact paths of the samples
+  // this session dragged/pinned. No XML parsing, no format guesswork.
+  //
+  // Honesty rules (same as the rest of the app):
+  //  • exact path found         → "in project"
+  //  • only the filename found  → reported separately as a likelier-but-not-
+  //    certain match (two packs can both have "Kick 1.wav")
+  //  • not found                → stays "tried"; we never claim it was deleted,
+  //    only that the last SAVED version of the set doesn't reference it.
+  ipcMain.handle('dialog:openAls', async () => {
+    const win = BrowserWindow.getFocusedWindow()
+    const opts = { properties: ['openFile' as const], filters: [{ name: 'Ableton Live Set', extensions: ['als'] }] }
+    const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle('als:check', (_e, alsPath: string, samplePaths: string[]) => checkAlsReferences(alsPath, samplePaths))
+
   ipcMain.handle('store:get', () => readStore())
   ipcMain.handle('store:set', (_e, data: StoreShape) => {
     writeStore(data)
     return true
   })
 })
+
+// Cache the decompressed set by modification time — the renderer polls every
+// few seconds, but we only re-read and decompress when Ableton actually
+// saved a new version.
+let alsCache: { path: string; mtimeMs: number; text: string } | null = null
+
+function xmlEscape(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&apos;')
+}
+
+function checkAlsReferences(alsPath: string, samplePaths: string[]) {
+  try {
+    const stat = fs.statSync(alsPath)
+    if (!alsCache || alsCache.path !== alsPath || alsCache.mtimeMs !== stat.mtimeMs) {
+      const raw = fs.readFileSync(alsPath)
+      let text: string
+      try {
+        text = zlib.gunzipSync(raw).toString('utf-8')
+      } catch {
+        // Not gzipped (some tools save plain XML) — read it as-is.
+        text = raw.toString('utf-8')
+      }
+      alsCache = { path: alsPath, mtimeMs: stat.mtimeMs, text }
+    }
+    const text = alsCache.text
+    const found: string[] = []
+    const nameOnly: string[] = []
+    for (const p of samplePaths) {
+      if (text.includes(p) || text.includes(xmlEscape(p))) {
+        found.push(p)
+        continue
+      }
+      const base = path.basename(p)
+      if (text.includes(`"${xmlEscape(base)}"`)) nameOnly.push(p)
+    }
+    return { ok: true as const, mtimeMs: stat.mtimeMs, name: path.basename(alsPath), found, nameOnly }
+  } catch (err) {
+    return { ok: false as const, name: path.basename(alsPath), error: (err as Error).message }
+  }
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

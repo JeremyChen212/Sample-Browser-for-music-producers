@@ -325,6 +325,47 @@ export function useLibrary() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, activeSessionId])
 
+  // --- Tried: samples dragged into Ableton this session ---
+  // Recorded on every drag, newest first, no duplicates. Written straight
+  // into the active session (like pins), without going through
+  // syncActiveSession so it can't race a pin/pack change.
+  const updateActiveSessionField = (patch: (s: SavedSession) => Partial<SavedSession>) => {
+    setSessions((prev) => {
+      const next = prev.map((s) => (s.id === activeSessionId ? { ...s, ...patch(s) } : s))
+      writeStore({ sessions: next })
+      return next
+    })
+  }
+
+  const recordDrag = useCallback(
+    (id: string) => {
+      updateActiveSessionField((s) => ({ tried: [id, ...(s.tried ?? []).filter((t) => t !== id)].slice(0, 200) }))
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeSessionId],
+  )
+
+  const removeTried = useCallback(
+    (id: string) => {
+      updateActiveSessionField((s) => ({ tried: (s.tried ?? []).filter((t) => t !== id) }))
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeSessionId],
+  )
+
+  // --- Link this session to an Ableton set ---
+  const linkAbletonSet = useCallback(async () => {
+    const picked = await window.api.openAlsDialog()
+    if (!picked) return
+    updateActiveSessionField(() => ({ alsPath: picked }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId])
+
+  const unlinkAbletonSet = useCallback(() => {
+    updateActiveSessionField(() => ({ alsPath: undefined }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId])
+
   // --- Pins (order preserved, no duplicates) — per-session, like the packs
   // selected below.
   const togglePin = useCallback(
@@ -547,6 +588,49 @@ export function useLibrary() {
   }, [tags])
 
   const activeSession = useMemo(() => sessions.find((s) => s.id === activeSessionId), [sessions, activeSessionId])
+  const tried = useMemo(() => activeSession?.tried ?? [], [activeSession])
+
+  // "In project" — re-checked every few seconds while a set is linked. The
+  // main process only re-reads the .als when its save time changes, so
+  // polling is cheap; the badge simply appears after you hit ⌘S in Ableton.
+  // Only tried + pinned samples are checked: those are the ones this
+  // session has a reason to ask about.
+  const [inProject, setInProject] = useState<Set<string>>(new Set())
+  const [nameMatchOnly, setNameMatchOnly] = useState<Set<string>>(new Set())
+  const [projectStatus, setProjectStatus] = useState<{ name: string; error?: string } | null>(null)
+  const alsPath = activeSession?.alsPath
+  useEffect(() => {
+    if (!alsPath) {
+      setInProject(new Set())
+      setNameMatchOnly(new Set())
+      setProjectStatus(null)
+      return
+    }
+    let cancelled = false
+    const ids = Array.from(new Set([...tried, ...pinned]))
+    const pathToId = new Map<string, string>()
+    for (const id of ids) {
+      const s = samplesById.get(id)
+      if (s) pathToId.set(s.path, id)
+    }
+    const run = async () => {
+      const res = await window.api.checkAls(alsPath, Array.from(pathToId.keys()))
+      if (cancelled) return
+      if (!res.ok) {
+        setProjectStatus({ name: res.name, error: "Can't read this set" })
+        return
+      }
+      setProjectStatus({ name: res.name })
+      setInProject(new Set((res.found ?? []).map((p) => pathToId.get(p)!).filter(Boolean)))
+      setNameMatchOnly(new Set((res.nameOnly ?? []).map((p) => pathToId.get(p)!).filter(Boolean)))
+    }
+    run()
+    const timer = setInterval(run, 4000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [alsPath, tried, pinned, samplesById])
 
   // Recent-first, so the session dropdown surfaces what you were just in
   // rather than always the same alphabetical top.
@@ -858,6 +942,14 @@ export function useLibrary() {
     sidebarPacks,
     favorites,
     toggleFavorite,
+    tried,
+    recordDrag,
+    removeTried,
+    linkAbletonSet,
+    unlinkAbletonSet,
+    inProject,
+    nameMatchOnly,
+    projectStatus,
     hiddenPacks,
     hidePack,
     unhidePack,

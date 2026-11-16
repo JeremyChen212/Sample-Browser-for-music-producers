@@ -8,12 +8,13 @@ interface Props {
   onPlay: (sample: ScannedSample) => void
   onStop: () => void
   onRemovePin: (id: string) => void
+  onDragged: (id: string) => void
 }
 
 // Persistent compact tray, reachable while browsing any scope: alternatives
 // to compare against a pattern, or a combination to try together. One tray
 // serves both uses — no separate modes.
-export function PinnedTray({ pinned, samplesById, playingId, onPlay, onStop, onRemovePin }: Props) {
+export function PinnedTray({ pinned, samplesById, playingId, onPlay, onStop, onRemovePin, onDragged }: Props) {
   // Collapsed to a compact "Pinned · 0" label when empty, expanding only
   // once something's actually pinned — an empty tray shouldn't hold as much
   // vertical space as a full one. A fixed min-height on both branches still
@@ -67,6 +68,7 @@ export function PinnedTray({ pinned, samplesById, playingId, onPlay, onStop, onR
             onDragStart={(e) => {
               e.preventDefault()
               window.api.startDrag(s.path)
+              onDragged(s.id)
             }}
             className="chip is-selected"
             style={{ cursor: 'grab' }}

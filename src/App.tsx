@@ -9,6 +9,7 @@ import { PackTreeSidebar } from './components/PackTreeSidebar'
 import { CategoryFilterBar } from './components/CategoryFilterBar'
 import { SessionBar } from './components/SessionBar'
 import { PackMenu } from './components/PackMenu'
+import { TriedTray } from './components/TriedTray'
 import { ArrowLeftIcon, BrandMark, ChevronIcon, FolderIcon, PencilIcon, SearchIcon, ShuffleIcon } from './components/Icon'
 
 const ROW_HEIGHT = 40
@@ -139,6 +140,7 @@ export default function App() {
 
   const togglePin = useCallback((sample: ScannedSample) => lib.togglePin(sample.id), [lib])
 
+  const triedSet = useMemo(() => new Set(lib.tried), [lib.tried])
   const rowData: RowData = {
     items: lib.browseItems,
     playingId,
@@ -150,6 +152,10 @@ export default function App() {
     onToggleFavorite: lib.toggleFavorite,
     onTogglePin: togglePin,
     onOpenPack: lib.openPack,
+    tried: triedSet,
+    inProject: lib.inProject,
+    nameMatchOnly: lib.nameMatchOnly,
+    onDragged: lib.recordDrag,
   }
 
   const isFocused = Boolean(lib.browse.packPath)
@@ -347,6 +353,9 @@ export default function App() {
               onDuplicate={lib.duplicateSession}
               onDelete={lib.deleteSession}
               onRetry={lib.retrySave}
+              projectStatus={lib.projectStatus}
+              onLinkSet={lib.linkAbletonSet}
+              onUnlinkSet={lib.unlinkAbletonSet}
             />
           </div>
 
@@ -381,6 +390,20 @@ export default function App() {
               onPlay={play}
               onStop={stop}
               onRemovePin={lib.removePin}
+              onDragged={lib.recordDrag}
+            />
+            <TriedTray
+              tried={lib.tried}
+              samplesById={lib.samplesById}
+              playingId={playingId}
+              pinned={lib.pinned}
+              inProject={lib.inProject}
+              linked={Boolean(lib.projectStatus && !lib.projectStatus.error)}
+              onPlay={play}
+              onStop={stop}
+              onPin={lib.togglePin}
+              onRemove={lib.removeTried}
+              onDragged={lib.recordDrag}
             />
           </div>
 

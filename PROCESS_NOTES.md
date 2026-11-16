@@ -15,6 +15,8 @@ The app has a lot of features: sessions, packs, tags, hiding, pins, favorites, a
 | Rename a session | Double-click the title, or ✎ on any row | Not buried at the bottom of a menu |
 | Delete a session | 🗑 on the row, then a confirmation on that same row | No pop-up dialog |
 | Pack ⋯ button | Shows on hover | Not shown on all 400 rows at once |
+| Tried / In project | A quiet mark on the row plus a Tried row, which appears only after your first drag | No toast on every drag, no "review your session" screen |
+| Ableton set link | Next to the session name (a session is a beat) | Not a global setting |
 
 **Backend work you never see, but that shows up at the right moment:**
 - **Shuffle, Pick for me, and Swap all skip hidden packs.** Hiding a pack once means no future session ever draws it.
@@ -65,6 +67,27 @@ The app has a lot of features: sessions, packs, tags, hiding, pins, favorites, a
 - **Each row in the menu:** click to open, ✎ to rename right there, 🗑 to delete with a "Delete? Cancel / Delete" check on that same row. A session holds your pins, so a stray click shouldn't erase it.
 - **New sessions get unique names** and open with the name selected, ready to type over.
 
+## 5. Consider → try → keep (Pin → Drag → Heart)
+
+**What I noticed:** If I dragged a sample straight into Ableton without pinning it first, the app forgot it. An hour later, finding "that hat I tried" meant searching all over again. I also didn't want to come back after every beat just to heart the samples that made it into the track.
+
+**What I added:**
+- **Every drag into Ableton is recorded automatically** under **"↗ Tried · N"** in the session, newest first. You can play, pin, or clear each one. Rows get a quiet **Tried** mark.
+- **Link Ableton set…** sits next to the session name. One session = one beat = one set. Whenever you save that set in Ableton, samples it references get an **"In project"** mark, and the Tried row shows "2 in project". No extra clicks.
+
+**How the link works:** a `.als` file is gzip-compressed XML, and every sample a set uses is stored by its file path. Full project parsing didn't work within the original 3-hour build, but this needs much less: decompress the file and look for the exact paths of the samples this session dragged or pinned. The app checks every few seconds but only re-reads the file when Ableton actually saves a new version.
+
+**Being honest about what it can see:**
+- Exact path found → **In project**
+- Only the filename found → **In project?** (dashed), because two packs can both have "Kick 1.wav"
+- Dragged but not in the saved set → stays **Tried**. The app never claims you deleted it, only that the last *saved* version doesn't reference it.
+
+**Decisions:**
+- **Drags show no notification.** You drag dozens of samples per beat, and a toast each time would break your focus.
+- **Drags aren't auto-pinned.** Pins mean "maybe, try later." Filling them with every drag would make the shortlist meaningless.
+- **Hearts stay manual.** "In project" is a fact about one beat. "Keeper" is a judgment about your taste, so the app records facts and leaves judgments to you.
+- **Pins:** consider. **Drags:** try. **Hearts:** keep. Each step is a bigger commitment, and only the last one carries across sessions.
+
 ---
 
 ## Tab structure: should Favorites be its own tab?
@@ -73,6 +96,7 @@ I kept **All samples / Favorites / Session packs** as three tabs. Favorites work
 
 ## Next steps (designed, not built yet)
 - Let the tag filter also narrow the sample list in "All session samples", not just the pack list
-- Bring back the project-history idea: read Ableton project files to show "used in 3 projects" on each sample
+- Suggest (not auto-apply) a heart for samples that end up "In project" across 3+ beats
+- Auto-detect the set instead of linking it: guess the most recently saved .als in your Projects folder
 - Read BPM and key from filenames
 - Keyboard browsing: arrow keys plus auto-preview, the way producers audition sounds

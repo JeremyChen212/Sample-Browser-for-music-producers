@@ -15,6 +15,13 @@ export interface RowData {
   onToggleFavorite: (id: string) => void
   onTogglePin: (sample: ScannedSample) => void
   onOpenPack: (packPath: string) => void
+  // Consider → try → keep: rows quietly show whether a sample was dragged
+  // into Ableton this session ("Tried") or is in the linked set's last save
+  // ("In project"). No toast on drag — just a mark you'll notice later.
+  tried: Set<string>
+  inProject: Set<string>
+  nameMatchOnly: Set<string>
+  onDragged: (id: string) => void
 }
 
 // Renders a sample row (play/pin/favorite/reveal/drag), or a "missing"
@@ -32,6 +39,10 @@ export function BrowseRow({ index, style, data }: ListChildComponentProps<RowDat
     onToggleFavorite,
     onTogglePin,
     onOpenPack,
+    tried,
+    inProject,
+    nameMatchOnly,
+    onDragged,
   } = data
   const item = items[index]
 
@@ -63,6 +74,7 @@ export function BrowseRow({ index, style, data }: ListChildComponentProps<RowDat
         // default HTML5 drag and hand the OS a real file drag instead.
         e.preventDefault()
         window.api.startDrag(s.path)
+        onDragged(s.id)
       }}
     >
       <div style={{ width: 40, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
@@ -80,6 +92,19 @@ export function BrowseRow({ index, style, data }: ListChildComponentProps<RowDat
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
         {s.category !== 'unknown' && <span className="type-tag">{CATEGORY_LABELS[s.category]}</span>}
+        {inProject.has(s.id) ? (
+          <span className="status-tag is-in-project" title="Referenced in the last saved version of your linked Ableton set">
+            In project
+          </span>
+        ) : nameMatchOnly.has(s.id) ? (
+          <span className="status-tag is-in-project is-uncertain" title="A file with this name is in your set — could be from a different pack">
+            In project?
+          </span>
+        ) : tried.has(s.id) ? (
+          <span className="status-tag" title="You dragged this into Ableton during this session">
+            Tried
+          </span>
+        ) : null}
       </div>
       {showPackColumn && (
         <div

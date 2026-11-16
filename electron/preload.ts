@@ -37,6 +37,23 @@ export interface SavedSession {
   packPaths: string[]
   pinned: string[]
   updatedAt: number
+  // Consider → try → keep. Pins are "maybe, try later"; `tried` is every
+  // sample dragged into Ableton during this session, recorded automatically
+  // (no toast, no extra click — producing shouldn't be interrupted). Hearts
+  // (favorites) are the global "keeper". Optional for older saved sessions.
+  tried?: string[]
+  // The Ableton set this session is for, if linked. Lets the app mark tried
+  // samples as "In project" whenever that set is saved.
+  alsPath?: string
+}
+
+export interface AlsCheckResult {
+  ok: boolean
+  name: string
+  mtimeMs?: number
+  found?: string[]
+  nameOnly?: string[]
+  error?: string
 }
 
 // A user-made label for organizing packs (e.g. "● Ableton", "● Drill").
@@ -76,6 +93,9 @@ const api = {
   revealInFinder: (filePath: string): Promise<void> =>
     ipcRenderer.invoke('fs:revealInFinder', filePath),
   startDrag: (filePath: string): void => ipcRenderer.send('drag:start', filePath),
+  openAlsDialog: (): Promise<string | null> => ipcRenderer.invoke('dialog:openAls'),
+  checkAls: (alsPath: string, samplePaths: string[]): Promise<AlsCheckResult> =>
+    ipcRenderer.invoke('als:check', alsPath, samplePaths),
   getStore: (): Promise<StoreShape> => ipcRenderer.invoke('store:get'),
   setStore: (data: StoreShape): Promise<boolean> => ipcRenderer.invoke('store:set', data),
 }
