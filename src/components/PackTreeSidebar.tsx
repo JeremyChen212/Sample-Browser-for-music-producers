@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
+import type { PackTag } from '../../electron/preload'
 import type { PackInfo, PackTreeNode } from '../hooks/useLibrary'
-import { ChevronIcon } from './Icon'
+import { ChevronIcon, MoreIcon } from './Icon'
 
 interface TreeItemProps {
   node: PackTreeNode
@@ -9,12 +10,18 @@ interface TreeItemProps {
   focusedPath?: string
   onFocus: (packPath: string, folderPath: string) => void
   packPath: string
+  // Only pack roots (depth 0) get tag dots, the ⋯ button and right-click —
+  // pack-level actions don't mean anything on a subfolder.
+  packTags?: PackTag[]
+  isHidden?: boolean
+  onOpenMenu?: (packPath: string, x: number, y: number) => void
 }
 
 // Expand/collapse is local and separate from selection on purpose (per the
 // redesign): the chevron only reveals children, clicking the name is what
 // changes what the main list shows.
-function TreeItem({ node, depth, focusedPath, onFocus, packPath }: TreeItemProps) {
+function TreeItem({ node, depth, focusedPath, onFocus, packPath, packTags, isHidden, onOpenMenu }: TreeItemProps) {
+  const isPackRoot = depth === 0 && Boolean(onOpenMenu)
   // Every node starts collapsed, including pack roots — with dozens of packs
   // in a library, auto-expanding the top level turns the sidebar into a
   // wall of category folders before you've clicked anything.
@@ -29,8 +36,22 @@ function TreeItem({ node, depth, focusedPath, onFocus, packPath }: TreeItemProps
   return (
     <div>
       <div
-        className={`tree-item${isFocused ? ' is-focused' : ''}`}
-        style={{ paddingLeft: depth * 12, background: isAncestor ? 'var(--surface-alt)' : undefined }}
+        className={`tree-item${isFocused ? ' is-focused' : ''}${isPackRoot ? ' is-pack-root' : ''}`}
+        style={{
+          paddingLeft: depth * 12,
+          background: isAncestor ? 'var(--surface-alt)' : undefined,
+          // Hidden packs (only visible in All samples' folder view) are
+          // dimmed rather than removed — still findable, clearly set aside.
+          opacity: isHidden ? 0.5 : 1,
+        }}
+        onContextMenu={
+          isPackRoot
+            ? (e) => {
+                e.preventDefault()
+                onOpenMenu!(packPath, e.clientX, e.clientY)
+              }
+            : undefined
+        }
       >
         <button
           onClick={() => setExpanded((e) => !e)}
@@ -69,10 +90,34 @@ function TreeItem({ node, depth, focusedPath, onFocus, packPath }: TreeItemProps
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}
-          title={node.name}
+          title={isHidden ? `${node.name} (hidden from sessions)` : node.name}
         >
           {node.name}
         </button>
+        {isPackRoot && packTags && packTags.length > 0 && (
+          <span style={{ display: 'flex', gap: 3, flexShrink: 0, paddingRight: 2 }} title={packTags.map((t) => t.name).join(', ')}>
+            {packTags.map((t) => (
+              <span key={t.id} className="tag-dot" style={{ background: t.color }} />
+            ))}
+          </span>
+        )}
+        {isPackRoot && (
+          // Revealed on row hover (see .tree-item.is-pack-root in CSS) so the
+          // list stays calm, but always reachable — and right-click opens
+          // the same menu for people who reach for that first.
+          <button
+            className="icon-btn pack-more-btn"
+            title="Pack actions"
+            aria-label={`Actions for ${node.name}`}
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect()
+              onOpenMenu!(packPath, r.left, r.bottom + 4)
+            }}
+            style={{ width: 22, height: 22, flexShrink: 0 }}
+          >
+            <MoreIcon size={13} />
+          </button>
+        )}
       </div>
       {expanded && node.children.length > 0 && (
         <div className="tree-children">
@@ -109,6 +154,13 @@ interface Props {
   header?: ReactNode
   onFocus: (packPath: string, folderPath: string) => void
   onClearFocus: () => void
+  // Pack-level extras (⋯ menu, tag dots, hidden dimming, tag filter row).
+  tags?: PackTag[]
+  tagsByPack?: Map<string, PackTag[]>
+  hiddenPacks?: Set<string>
+  activeTagId?: string
+  onSelectTag?: (tagId: string | undefined) => void
+  onOpenPackMenu?: (packPath: string, x: number, y: number) => void
 }
 
 // Left sidebar: an optional "root" row (All session samples / All samples)
@@ -123,7 +175,21 @@ export function PackTreeSidebar({
   header,
   onFocus,
   onClearFocus,
+  tags = [],
+  tagsByPack,
+  hiddenPacks,
+  activeTagId,
+  onSelectTag,
+  onOpenPackMenu,
 }: Props) {
+  // The tag row can be collapsed so it only takes space when you want it.
+  const [tagsOpen, setTagsOpen] = useState(true)
+  // Only show tags that are actually on a pack in THIS list — a "Drill" chip
+  // that filters the session down to nothing is a dead end.
+  const visibleTags = tags.filter((t) => packs.some((p) => t.packPaths.includes(p.packPath)))
+  const activeTag = tags.find((t) => t.id === activeTagId)
+  const shownPacks = activeTag ? packs.filter((p) => activeTag.packPaths.includes(p.packPath)) : packs
+
   return (
     <div
       className="scroll-area"
@@ -137,8 +203,43 @@ export function PackTreeSidebar({
       }}
     >
       {header ?? (
-        <div className="section-label" style={{ padding: '2px 4px 8px' }}>
+        // Same 28px row height as the "Sound type" chip row on the right, so
+        // the two column headers sit on one line across the divider.
+        <div className="section-label column-head" style={{ padding: '0 4px', marginBottom: 8 }}>
           Packs · {packs.length}
+        </div>
+      )}
+      {/* Tag filter — workflow note: with 400+ packs, I kept wanting "just
+          my Ableton stock packs" or "just the drill kits". Tags (color dot +
+          name) filter the pack list; click again or "All" to clear. */}
+      {onSelectTag && visibleTags.length > 0 && (
+        <div style={{ margin: '0 4px 8px' }}>
+          <button
+            className="section-label"
+            onClick={() => setTagsOpen((v) => !v)}
+            style={{ background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+            aria-expanded={tagsOpen}
+          >
+            <ChevronIcon size={9} direction={tagsOpen ? 'down' : 'right'} />
+            Tags{activeTag ? ` · ${activeTag.name}` : ''}
+          </button>
+          {tagsOpen && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+              <button className={`chip chip-sm${!activeTag ? ' is-selected' : ''}`} onClick={() => onSelectTag(undefined)}>
+                All
+              </button>
+              {visibleTags.map((t) => (
+                <button
+                  key={t.id}
+                  className={`chip chip-sm${activeTagId === t.id ? ' is-selected' : ''}`}
+                  onClick={() => onSelectTag(activeTagId === t.id ? undefined : t.id)}
+                >
+                  <span className="tag-dot" style={{ background: t.color }} />
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {rootLabel && (
@@ -162,7 +263,7 @@ export function PackTreeSidebar({
           {rootLabel}
         </button>
       )}
-      {packs.map((p) => {
+      {shownPacks.map((p) => {
         const tree = packTrees.get(p.packPath)
         if (!tree) return null
         return (
@@ -173,9 +274,15 @@ export function PackTreeSidebar({
             focusedPath={focusedPath}
             onFocus={onFocus}
             packPath={p.packPath}
+            packTags={tagsByPack?.get(p.packPath)}
+            isHidden={hiddenPacks?.has(p.packPath)}
+            onOpenMenu={onOpenPackMenu}
           />
         )
       })}
+      {activeTag && shownPacks.length === 0 && (
+        <div style={{ fontSize: 12, color: 'var(--text-faint)', padding: '4px' }}>No packs here with this tag.</div>
+      )}
       {packs.length === 0 && (
         <div style={{ fontSize: 12, color: 'var(--text-faint)', padding: '4px', lineHeight: 1.5 }}>{emptyMessage}</div>
       )}

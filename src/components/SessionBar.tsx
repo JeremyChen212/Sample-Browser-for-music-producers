@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { SavedSession } from '../../electron/preload'
-import { CheckIcon, ChevronIcon } from './Icon'
+import { CheckIcon, ChevronIcon, PencilIcon } from './Icon'
 
 interface Props {
   activeSession?: SavedSession
@@ -9,7 +9,7 @@ interface Props {
   activeSessionId: string
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
   onSwitch: (id: string) => void
-  onCreate: () => void
+  onCreate: () => string | void
   onRename: (id: string, name: string) => void
   onDuplicate: (id: string) => void
   onDelete: (id: string) => void
@@ -39,6 +39,35 @@ export function SessionBar({
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
+  // Which row in the dropdown is being renamed in place, and which row is
+  // asking "Delete?" — both live on the row itself instead of acting only
+  // on the active session from a menu at the bottom.
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [rowDraft, setRowDraft] = useState('')
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  // Set right after "+ New session" so the new session's name opens ready
+  // to type over, instead of piling up more identically named sessions.
+  const [renameAfterCreate, setRenameAfterCreate] = useState(false)
+
+  useEffect(() => {
+    if (!renameAfterCreate || !activeSession) return
+    setNameDraft(activeSession.name)
+    setRenaming(true)
+    setRenameAfterCreate(false)
+  }, [renameAfterCreate, activeSession])
+
+  useEffect(() => {
+    if (!menuOpen) {
+      setEditingId(null)
+      setConfirmDeleteId(null)
+    }
+  }, [menuOpen])
+
+  const commitRowRename = (id: string) => {
+    const trimmed = rowDraft.trim()
+    if (trimmed) onRename(id, trimmed)
+    setEditingId(null)
+  }
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
@@ -68,6 +97,8 @@ export function SessionBar({
   // move focus, Home/End jump to the ends, Escape and Tab both close and
   // hand focus back to the trigger.
   const handleMenuKeyDown = (e: KeyboardEvent) => {
+    // Typing a new name inside a row shouldn't trigger menu navigation.
+    if ((e.target as HTMLElement).tagName === 'INPUT') return
     const items = itemRefs.current.filter((el): el is HTMLButtonElement => Boolean(el))
     const currentIndex = items.findIndex((el) => el === document.activeElement)
     if (e.key === 'ArrowDown') {
@@ -105,6 +136,7 @@ export function SessionBar({
     return (
       <input
         autoFocus
+        onFocus={(e) => e.currentTarget.select()}
         type="text"
         className="input"
         style={{ width: 220, height: 30, fontSize: 14, fontWeight: 700, padding: '3px 10px' }}
@@ -133,9 +165,13 @@ export function SessionBar({
       <button
         ref={triggerRef}
         onClick={() => setMenuOpen((v) => !v)}
+        // Workflow note: renaming used to be buried at the bottom of the
+        // menu and only worked on whichever session was active. Double-
+        // clicking the title now renames it right where you're looking.
+        onDoubleClick={startRename}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
-        title="Switch or manage sessions"
+        title="Switch or manage sessions · double-click to rename"
         className={`session-title-btn${menuOpen ? ' is-open' : ''}`}
         style={{
           display: 'flex',
@@ -188,6 +224,7 @@ export function SessionBar({
             onClick={() => {
               setMenuOpen(false)
               onCreate()
+              setRenameAfterCreate(true)
             }}
           >
             + New session
@@ -196,59 +233,105 @@ export function SessionBar({
             <div className="scroll-area" style={{ maxHeight: 220, overflowY: 'auto' }}>
               {recentSessions.map((s) => {
                 const count = s.packPaths?.length ?? 0
+                const isActive = s.id === activeSessionId
+                // Rename in place — same row, same spot.
+                if (editingId === s.id) {
+                  return (
+                    <div key={s.id} style={{ padding: '3px 4px' }}>
+                      <input
+                        autoFocus
+                        onFocus={(e) => e.currentTarget.select()}
+                        className="input"
+                        value={rowDraft}
+                        onChange={(e) => setRowDraft(e.target.value)}
+                        onBlur={() => commitRowRename(s.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitRowRename(s.id)
+                          if (e.key === 'Escape') setEditingId(null)
+                        }}
+                        style={{ width: '100%', height: 28, fontSize: 13 }}
+                      />
+                    </div>
+                  )
+                }
+                // Delete asks once, on the row itself — a session holds your
+                // pins, so a single mis-click shouldn't wipe it out.
+                if (confirmDeleteId === s.id) {
+                  return (
+                    <div key={s.id} className="session-row" style={{ background: 'var(--surface-alt)' }}>
+                      <span style={{ flex: 1, fontSize: 13 }}>Delete “{s.name}”?</span>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDeleteId(null)}>
+                        Cancel
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        style={{ color: 'var(--danger)' }}
+                        onClick={() => {
+                          setConfirmDeleteId(null)
+                          onDelete(s.id)
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )
+                }
                 return (
-                  <button
-                    key={s.id}
-                    ref={(el) => {
-                      itemRefs.current[nextIndex()] = el
-                    }}
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false)
-                      if (s.id !== activeSessionId) onSwitch(s.id)
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      width: '100%',
-                      textAlign: 'left',
-                      background: s.id === activeSessionId ? 'var(--accent-soft)' : 'none',
-                      border: 'none',
-                      borderRadius: 'var(--radius-sm)',
-                      cursor: 'pointer',
-                      padding: '6px 8px',
-                      font: 'inherit',
-                      fontSize: 13,
-                      color: s.id === activeSessionId ? 'var(--accent-strong)' : 'var(--text)',
-                    }}
-                  >
-                    <span style={{ width: 14, flexShrink: 0, display: 'flex' }}>
-                      {s.id === activeSessionId && <CheckIcon size={12} />}
+                  <div key={s.id} className={`session-row${isActive ? ' is-active' : ''}`}>
+                    <button
+                      ref={(el) => {
+                        itemRefs.current[nextIndex()] = el
+                      }}
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        if (!isActive) onSwitch(s.id)
+                      }}
+                      onDoubleClick={() => {
+                        setRowDraft(s.name)
+                        setEditingId(s.id)
+                      }}
+                      className="session-row-main"
+                      title="Open · double-click to rename"
+                    >
+                      <span style={{ width: 14, flexShrink: 0, display: 'flex' }}>{isActive && <CheckIcon size={12} />}</span>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                      <span className="session-row-count">
+                        {count} pack{count === 1 ? '' : 's'}
+                      </span>
+                    </button>
+                    {/* Hover actions: rename and delete any session, not just the active one. */}
+                    <span className="session-row-actions">
+                      <button
+                        className="icon-btn"
+                        style={{ width: 22, height: 22 }}
+                        title="Rename"
+                        aria-label={`Rename ${s.name}`}
+                        onClick={() => {
+                          setRowDraft(s.name)
+                          setEditingId(s.id)
+                        }}
+                      >
+                        <PencilIcon size={11} />
+                      </button>
+                      <button
+                        className="icon-btn"
+                        style={{ width: 22, height: 22, color: 'var(--danger)' }}
+                        title="Delete"
+                        aria-label={`Delete ${s.name}`}
+                        onClick={() => setConfirmDeleteId(s.id)}
+                      >
+                        <TrashIcon />
+                      </button>
                     </span>
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {s.name}
-                    </span>
-                    <span style={{ fontSize: 11, color: 'var(--text-faint)', flexShrink: 0 }}>
-                      {count} pack{count === 1 ? '' : 's'}
-                    </span>
-                  </button>
+                  </div>
                 )
               })}
             </div>
           )}
           <div style={{ height: 1, background: 'var(--border)', margin: '6px 0' }} />
-          <button
-            ref={(el) => {
-              itemRefs.current[nextIndex()] = el
-            }}
-            role="menuitem"
-            className="btn btn-ghost btn-sm"
-            style={{ width: '100%', justifyContent: 'flex-start' }}
-            onClick={startRename}
-          >
-            Rename
-          </button>
+          {/* Rename/Delete moved onto each row above; only Duplicate stays
+              here since it's about the session you're currently in. */}
           <button
             ref={(el) => {
               itemRefs.current[nextIndex()] = el
@@ -261,24 +344,18 @@ export function SessionBar({
               onDuplicate(activeSessionId)
             }}
           >
-            Duplicate
-          </button>
-          <button
-            ref={(el) => {
-              itemRefs.current[nextIndex()] = el
-            }}
-            role="menuitem"
-            className="btn btn-ghost btn-sm"
-            style={{ width: '100%', justifyContent: 'flex-start', color: 'var(--danger)' }}
-            onClick={() => {
-              setMenuOpen(false)
-              onDelete(activeSessionId)
-            }}
-          >
-            Delete
+            Duplicate current session
           </button>
         </div>
       )}
     </div>
+  )
+}
+
+function TrashIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4" />
+    </svg>
   )
 }

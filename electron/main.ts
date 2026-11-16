@@ -32,6 +32,11 @@ interface StoreShape {
   favorites: string[]
   sessions: SavedSession[]
   activeSessionId: string
+  // Packs marked "Hide from sessions" and user-made pack tags — see
+  // preload.ts for the full shape and reasoning. Stored as plain JSON
+  // alongside everything else, no extra handling needed here.
+  hiddenPacks?: string[]
+  tags?: { id: string; name: string; color: string; packPaths: string[] }[]
   // Legacy top-level fields from before named sessions existed. Only ever
   // read once, by the renderer's migration on first load after upgrading —
   // new code always reads pins/packs off the active session instead.

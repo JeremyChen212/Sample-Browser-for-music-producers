@@ -8,6 +8,7 @@ import { SessionPackPicker } from './components/SessionPackPicker'
 import { PackTreeSidebar } from './components/PackTreeSidebar'
 import { CategoryFilterBar } from './components/CategoryFilterBar'
 import { SessionBar } from './components/SessionBar'
+import { PackMenu } from './components/PackMenu'
 import { ArrowLeftIcon, BrandMark, ChevronIcon, FolderIcon, PencilIcon, SearchIcon, ShuffleIcon } from './components/Icon'
 
 const ROW_HEIGHT = 40
@@ -57,6 +58,41 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const playRequestId = useRef(0)
   const [listWrapRef, listHeight] = useMeasuredHeight()
+  // Which pack's ⋯ / right-click menu is open, and where to draw it.
+  const [packMenu, setPackMenu] = useState<{ packPath: string; x: number; y: number } | null>(null)
+  // Tag filter for the sidebar's pack list (undefined = show all packs).
+  const [activeTagId, setActiveTagId] = useState<string | undefined>(undefined)
+  // One-line confirmation with Undo, used after hiding a pack — undo
+  // instead of an "Are you sure?" dialog keeps hiding to a single click.
+  const [toast, setToast] = useState<{ message: string; onUndo?: () => void } | null>(null)
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 6000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  // A tag filter belongs to the pack list you set it on — switching tabs
+  // starts clean rather than carrying a filter into a list it may not fit.
+  useEffect(() => {
+    setActiveTagId(undefined)
+  }, [lib.browse.scope])
+
+  const openPackMenu = useCallback((packPath: string, x: number, y: number) => setPackMenu({ packPath, x, y }), [])
+  const closePackMenu = useCallback(() => setPackMenu(null), [])
+
+  const hidePackWithUndo = useCallback(
+    (packPath: string) => {
+      const wasInSession = lib.sessionPackPaths.has(packPath)
+      const name = lib.packs.find((p) => p.packPath === packPath)?.packName ?? 'Pack'
+      lib.hidePack(packPath)
+      setToast({
+        message: wasInSession ? `“${name}” removed and hidden from sessions` : `“${name}” hidden from sessions`,
+        onUndo: () => lib.unhidePack(packPath, wasInSession),
+      })
+    },
+    [lib],
+  )
 
   const toggleAllSamplesFolders = useCallback(() => {
     // Hiding the panel only hides it — it doesn't reset the folder you were
@@ -141,7 +177,9 @@ export default function App() {
   const sidebarHeader =
     lib.browse.scope === 'session' ? (
       <div style={{ marginBottom: 8 }}>
-        <div className="section-label" style={{ padding: '2px 4px 8px' }}>
+        {/* column-head = same 28px row as "Sound type" on the right, so the
+            two column titles line up across the divider. */}
+        <div className="section-label column-head" style={{ padding: '0 4px', marginBottom: 8 }}>
           Session packs · {lib.sessionPackPaths.size}
         </div>
         <div style={{ display: 'flex', gap: 8, padding: '0 4px' }}>
@@ -242,6 +280,49 @@ export default function App() {
 
       <audio ref={audioRef} onEnded={() => setPlayingId(null)} style={{ display: 'none' }} />
 
+      {packMenu &&
+        (() => {
+          const info = lib.packs.find((p) => p.packPath === packMenu.packPath)
+          if (!info) return null
+          const path = packMenu.packPath
+          return (
+            <PackMenu
+              packPath={path}
+              packName={info.packName}
+              x={packMenu.x}
+              y={packMenu.y}
+              inSession={lib.sessionPackPaths.has(path)}
+              isHidden={lib.hiddenPacks.has(path)}
+              tags={lib.tags}
+              onClose={closePackMenu}
+              onSwap={() => lib.replacePack(path)}
+              onAddToSession={() => lib.addPackToSession(path)}
+              onRemoveFromSession={() => lib.removePackFromSession(path)}
+              onHide={() => hidePackWithUndo(path)}
+              onUnhide={() => lib.unhidePack(path)}
+              onToggleTag={(tagId) => lib.toggleTagOnPack(tagId, path)}
+              onCreateTag={(name, color) => lib.createTag(name, color, path)}
+            />
+          )
+        })()}
+
+      {toast && (
+        <div className="toast" role="status">
+          <span>{toast.message}</span>
+          {toast.onUndo && (
+            <button
+              className="btn btn-ghost btn-sm toast-undo"
+              onClick={() => {
+                toast.onUndo?.()
+                setToast(null)
+              }}
+            >
+              Undo
+            </button>
+          )}
+        </div>
+      )}
+
       {!lib.folder ? (
         <p className="text-muted" style={{ marginTop: 24 }}>
           Choose a folder to get started.
@@ -321,6 +402,8 @@ export default function App() {
                 onReplace={lib.replacePack}
                 onClearAll={lib.clearSessionPacks}
                 onClose={() => setManagePacksOpen(false)}
+                hiddenPacks={lib.hiddenPacks}
+                onUnhide={(path) => lib.unhidePack(path)}
               />
             </div>
           )}
@@ -416,43 +499,16 @@ export default function App() {
                     header={sidebarHeader}
                     onFocus={lib.focusNode}
                     onClearFocus={lib.clearFocus}
+                    tags={lib.tags}
+                    tagsByPack={lib.tagsByPack}
+                    hiddenPacks={lib.hiddenPacks}
+                    activeTagId={activeTagId}
+                    onSelectTag={setActiveTagId}
+                    onOpenPackMenu={openPackMenu}
                   />
                 )}
 
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-              {/* Breadcrumbs: shown whenever focused on a pack/folder, whether
-                  reached standalone or via the sidebar — stays visible even if
-                  the Folders panel is hidden, since it's the "where am I"
-                  record, independent of whether the tree itself is on screen. */}
-              {isFocused && lib.breadcrumbs.length > 0 && (
-                <div style={{ fontSize: 13, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 3 }}>
-                  {lib.breadcrumbs.map((crumb, i) => (
-                    <span key={crumb.folderPath} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                      {i > 0 && (
-                        <span style={{ color: 'var(--text-faint)', display: 'flex' }}>
-                          <ChevronIcon size={11} />
-                        </span>
-                      )}
-                      <button
-                        onClick={() => lib.focusNode(lib.browse.packPath!, crumb.folderPath)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          fontWeight: i === lib.breadcrumbs.length - 1 ? 600 : 400,
-                          color: i === lib.breadcrumbs.length - 1 ? 'var(--text)' : 'var(--text-muted)',
-                          padding: '2px 3px',
-                          font: 'inherit',
-                          fontSize: 13,
-                        }}
-                      >
-                        {crumb.name}
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
               {/* Empty states that route forward instead of dead-ending.
                   (Session's zero-pack case gets its own full-width state
                   above, replacing this whole row instead.) */}
@@ -479,9 +535,38 @@ export default function App() {
                 onSelectFormat={lib.setFormat}
               />
 
-              {lib.browseItems.length > 0 && (
-                <div className="text-faint" style={{ fontSize: 12, margin: '0 0 8px' }}>
-                  {sampleCount} sample(s)
+              {/* "Where am I + how many": the pack/folder trail and the result
+                  count share one quiet line directly above the list. This
+                  used to be a separate title row ABOVE Sound type, which
+                  pushed the filters down and out of line with the sidebar's
+                  header. Now both columns start on the same row. */}
+              {(lib.browseItems.length > 0 || isFocused) && (
+                <div className="count-line">
+                  {isFocused && lib.breadcrumbs.length > 0 ? (
+                    lib.breadcrumbs.map((crumb, i) => (
+                      <span key={crumb.folderPath} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                        {i > 0 && (
+                          <span style={{ color: 'var(--text-faint)', display: 'flex' }}>
+                            <ChevronIcon size={10} />
+                          </span>
+                        )}
+                        <button
+                          className={`crumb${i === lib.breadcrumbs.length - 1 ? ' is-current' : ''}`}
+                          onClick={() => lib.focusNode(lib.browse.packPath!, crumb.folderPath)}
+                        >
+                          {crumb.name}
+                        </button>
+                      </span>
+                    ))
+                  ) : sidebarRootLabel && showSidebar ? (
+                    <span className="crumb is-current" style={{ cursor: 'default' }}>
+                      {sidebarRootLabel}
+                    </span>
+                  ) : null}
+                  <span className="text-faint">
+                    {(isFocused || (sidebarRootLabel && showSidebar)) && '· '}
+                    {sampleCount.toLocaleString()} sample{sampleCount === 1 ? '' : 's'}
+                  </span>
                 </div>
               )}
 

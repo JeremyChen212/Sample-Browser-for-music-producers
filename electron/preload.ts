@@ -39,9 +39,26 @@ export interface SavedSession {
   updatedAt: number
 }
 
+// A user-made label for organizing packs (e.g. "● Ableton", "● Drill").
+// Tags live on PACKS, not samples — favorites (hearts) already mark
+// individual sounds, so the two never compete: hearts mark sounds, tags
+// organize packs. Global like favorites, not tied to any one session.
+export interface PackTag {
+  id: string
+  name: string
+  color: string
+  packPaths: string[]
+}
+
 export interface StoreShape {
   lastFolder?: string
   favorites: string[]
+  // Packs the user has said "not for me" about. Hidden packs are kept out of
+  // every session (Shuffle, Pick for me, Swap) but are NOT deleted or moved —
+  // their samples stay searchable in All samples. Optional so older saved
+  // stores load without a migration.
+  hiddenPacks?: string[]
+  tags?: PackTag[]
   sessions: SavedSession[]
   activeSessionId: string
   // Legacy top-level fields from before named sessions existed. Only ever

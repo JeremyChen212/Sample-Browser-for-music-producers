@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { SampleCategory, SavedSession, ScannedSample, StoreShape } from '../../electron/preload'
+import type { PackTag, SampleCategory, SavedSession, ScannedSample, StoreShape } from '../../electron/preload'
 
 export type Scope = 'all' | 'favorites' | 'session' | 'pack'
 export type Format = 'loop' | 'oneshot'
@@ -72,6 +72,21 @@ export interface PackTreeNode {
 
 const INITIAL_BROWSE: BrowseState = { scope: 'all', query: '' }
 
+// The six colors a tag can be. A small fixed palette (instead of a full
+// color picker) keeps tag creation to one click and keeps every tag
+// readable against the app's soft green theme.
+export const TAG_COLORS = ['#d9534f', '#e8a33d', '#d4c24a', '#4f9d69', '#4a7fc1', '#9161b8']
+
+// New sessions get a unique default name ("Session 2", "Session 3", …)
+// instead of every one being "Untitled session" — two identically named
+// rows in the session menu made it impossible to tell which was which.
+function nextSessionName(existing: SavedSession[]) {
+  const taken = new Set(existing.map((s) => s.name))
+  let n = existing.length + 1
+  while (taken.has(`Session ${n}`)) n++
+  return `Session ${n}`
+}
+
 // Macos-only app (per the product doc), so plain '/' splitting is safe —
 // no need to pull in node's `path` module inside renderer code.
 function relativeSegments(fullPath: string, base: string): string[] {
@@ -94,6 +109,11 @@ export function useLibrary() {
   const [status, setStatus] = useState('')
 
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  // Packs marked "not for me". Global (not per-session): once you've decided
+  // a pack isn't your sound, no future session should draw it either.
+  const [hiddenPacks, setHiddenPacks] = useState<Set<string>>(new Set())
+  // User-made pack tags (color dot + name). Global, like favorites.
+  const [tags, setTags] = useState<PackTag[]>([])
   // Pinned samples and the session-packs selection both live *inside* the
   // active session (see SavedSession) — these two are just that session's
   // data mirrored into fast-access state while it's the one being browsed.
@@ -147,6 +167,8 @@ export function useLibrary() {
     ;(async () => {
       const store = await window.api.getStore()
       setFavorites(new Set(store.favorites))
+      setHiddenPacks(new Set(store.hiddenPacks ?? []))
+      setTags(store.tags ?? [])
 
       // Normalize every saved session up front — one saved before `pinned`
       // existed on SavedSession (or any other legacy gap) would otherwise
@@ -362,7 +384,8 @@ export function useLibrary() {
 
   const pickRandomPacks = useCallback(
     (count: number) => {
-      const eligible = packs.filter((p) => !sessionPackPaths.has(p.packPath))
+      // Hidden packs are never drawn — that's the whole point of hiding one.
+      const eligible = packs.filter((p) => !sessionPackPaths.has(p.packPath) && !hiddenPacks.has(p.packPath))
       const shuffled = [...eligible].sort(() => Math.random() - 0.5)
       const picked = shuffled.slice(0, Math.max(0, count))
       setSessionPackPaths((prev) => {
@@ -373,12 +396,14 @@ export function useLibrary() {
       })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [packs, sessionPackPaths, pinned, activeSessionId],
+    [packs, sessionPackPaths, hiddenPacks, pinned, activeSessionId],
   )
 
   const replacePack = useCallback(
     (oldPackPath: string) => {
-      const eligible = packs.filter((p) => p.packPath !== oldPackPath && !sessionPackPaths.has(p.packPath))
+      const eligible = packs.filter(
+        (p) => p.packPath !== oldPackPath && !sessionPackPaths.has(p.packPath) && !hiddenPacks.has(p.packPath),
+      )
       if (eligible.length === 0) return
       const replacement = eligible[Math.floor(Math.random() * eligible.length)]
       setSessionPackPaths((prev) => {
@@ -393,7 +418,7 @@ export function useLibrary() {
       )
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [packs, sessionPackPaths, pinned, activeSessionId],
+    [packs, sessionPackPaths, hiddenPacks, pinned, activeSessionId],
   )
 
   // Reshuffle: a fresh random draw at the SAME size as the current
@@ -405,14 +430,15 @@ export function useLibrary() {
   const reshuffleSessionPacks = useCallback(() => {
     const count = sessionPackPaths.size
     if (count === 0 || packs.length === 0) return
-    const shuffled = [...packs].sort(() => Math.random() - 0.5)
-    const picked = shuffled.slice(0, Math.min(count, packs.length))
+    const drawable = packs.filter((p) => !hiddenPacks.has(p.packPath))
+    const shuffled = [...drawable].sort(() => Math.random() - 0.5)
+    const picked = shuffled.slice(0, Math.min(count, drawable.length))
     const next = new Set(picked.map((p) => p.packPath))
     setSessionPackPaths(next)
     syncActiveSession(next, pinned)
     setBrowse((b) => (b.scope === 'session' ? { ...b, packPath: undefined, folderPath: undefined } : b))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [packs, sessionPackPaths, pinned, activeSessionId])
+  }, [packs, sessionPackPaths, hiddenPacks, pinned, activeSessionId])
 
   // "Deselect all" — empties the packs (and, per the pins-follow-the-pack
   // rule above, leaves pins untouched) in the *current* session, without
@@ -426,6 +452,100 @@ export function useLibrary() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pinned, activeSessionId])
 
+  // --- Hide a pack ("not for me") ---
+  // Workflow note: when a Shuffle hands you a pack with nothing you like,
+  // "remove" alone wasn't enough — the next Shuffle could hand it right back.
+  // Hiding does both jobs in ONE action: it removes the pack from the current
+  // session AND keeps it out of every future draw. Nothing on disk changes;
+  // the pack's samples are still searchable from All samples.
+  const hidePack = useCallback(
+    (packPath: string) => {
+      setHiddenPacks((prev) => {
+        const next = new Set(prev)
+        next.add(packPath)
+        writeStore({ hiddenPacks: Array.from(next) })
+        return next
+      })
+      if (sessionPackPaths.has(packPath)) removePackFromSession(packPath)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessionPackPaths, removePackFromSession],
+  )
+
+  // Unhide — also the "Undo" behind the toast that follows a hide. When
+  // undoing, `restoreToSession` puts the pack back exactly where it was.
+  const unhidePack = useCallback(
+    (packPath: string, restoreToSession = false) => {
+      setHiddenPacks((prev) => {
+        const next = new Set(prev)
+        next.delete(packPath)
+        writeStore({ hiddenPacks: Array.from(next) })
+        return next
+      })
+      if (restoreToSession) addPackToSession(packPath)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [addPackToSession],
+  )
+
+  // --- Pack tags ---
+  // Tags are created right from a pack's ⋯ menu (name + one of six colors)
+  // and applied to that pack in the same step — no separate "manage tags"
+  // screen to visit first.
+  const saveTags = (next: PackTag[]) => {
+    writeStore({ tags: next })
+    return next
+  }
+
+  const createTag = useCallback((name: string, color: string, firstPackPath?: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const tag: PackTag = {
+      id: `tag-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: trimmed,
+      color,
+      packPaths: firstPackPath ? [firstPackPath] : [],
+    }
+    setTags((prev) => saveTags([...prev, tag]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const toggleTagOnPack = useCallback((tagId: string, packPath: string) => {
+    setTags((prev) =>
+      saveTags(
+        prev.map((t) =>
+          t.id !== tagId
+            ? t
+            : {
+                ...t,
+                packPaths: t.packPaths.includes(packPath)
+                  ? t.packPaths.filter((p) => p !== packPath)
+                  : [...t.packPaths, packPath],
+              },
+        ),
+      ),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const deleteTag = useCallback((tagId: string) => {
+    setTags((prev) => saveTags(prev.filter((t) => t.id !== tagId)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // packPath -> its tags, for drawing color dots next to pack names.
+  const tagsByPack = useMemo(() => {
+    const map = new Map<string, PackTag[]>()
+    for (const t of tags) {
+      for (const p of t.packPaths) {
+        const list = map.get(p) ?? []
+        list.push(t)
+        map.set(p, list)
+      }
+    }
+    return map
+  }, [tags])
+
   const activeSession = useMemo(() => sessions.find((s) => s.id === activeSessionId), [sessions, activeSessionId])
 
   // Recent-first, so the session dropdown surfaces what you were just in
@@ -437,7 +557,7 @@ export function useLibrary() {
   // asking for a name upfront: "Untitled session", renamed later, is a much
   // lower-friction start than a naming prompt every time.
   const createSession = useCallback(() => {
-    const session: SavedSession = { id: makeSessionId(), name: 'Untitled session', packPaths: [], pinned: [], updatedAt: Date.now() }
+    const session: SavedSession = { id: makeSessionId(), name: nextSessionName(sessions), packPaths: [], pinned: [], updatedAt: Date.now() }
     setSessions((prev) => {
       const next = [...prev, session]
       writeStore({ sessions: next, activeSessionId: session.id })
@@ -447,7 +567,9 @@ export function useLibrary() {
     setSessionPackPaths(new Set())
     setPinned([])
     setScope('session')
-  }, [])
+    return session.id
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions])
 
   // Switching sessions restores that session's packs *and* pins — the whole
   // working context comes back, not just the pack list.
@@ -736,6 +858,14 @@ export function useLibrary() {
     sidebarPacks,
     favorites,
     toggleFavorite,
+    hiddenPacks,
+    hidePack,
+    unhidePack,
+    tags,
+    tagsByPack,
+    createTag,
+    toggleTagOnPack,
+    deleteTag,
     pinned,
     togglePin,
     removePin,

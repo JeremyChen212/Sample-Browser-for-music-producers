@@ -11,6 +11,8 @@ interface Props {
   onReplace: (oldPackPath: string) => void
   onClearAll: () => void
   onClose: () => void
+  hiddenPacks: Set<string>
+  onUnhide: (packPath: string) => void
 }
 
 // "Edit packs" — the panel's only job is search/add/remove/swap for the
@@ -26,7 +28,10 @@ export function SessionPackPicker({
   onReplace,
   onClearAll,
   onClose,
+  hiddenPacks,
+  onUnhide,
 }: Props) {
+  const [showHidden, setShowHidden] = useState(false)
   const [randomCount, setRandomCount] = useState(3)
   const [query, setQuery] = useState('')
 
@@ -42,8 +47,13 @@ export function SessionPackPicker({
       return a.packName.localeCompare(b.packName)
     })
   }, [packs, sessionPackPaths])
-  const visible = q ? sorted.filter((p) => p.packName.toLowerCase().includes(q)) : sorted
-  const eligibleCount = packs.filter((p) => !sessionPackPaths.has(p.packPath)).length
+  // Hidden ("not my sound") packs are kept out of the main list so they
+  // stop competing for attention, and listed in their own collapsed section
+  // at the bottom where any of them can be brought back.
+  const notHidden = sorted.filter((p) => !hiddenPacks.has(p.packPath))
+  const hiddenList = sorted.filter((p) => hiddenPacks.has(p.packPath))
+  const visible = q ? notHidden.filter((p) => p.packName.toLowerCase().includes(q)) : notHidden
+  const eligibleCount = notHidden.filter((p) => !sessionPackPaths.has(p.packPath)).length
 
   return (
     <div className="modal-card" style={{ width: 460, maxWidth: '90vw' }}>
@@ -167,6 +177,43 @@ export function SessionPackPicker({
           )
         })}
       </div>
+
+      {hiddenList.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setShowHidden((v) => !v)}
+            aria-expanded={showHidden}
+            style={{ padding: '2px 4px' }}
+          >
+            {showHidden ? '▾' : '▸'} Hidden from sessions ({hiddenList.length})
+          </button>
+          {showHidden && (
+            <div
+              className="scroll-area"
+              style={{ maxHeight: 140, overflowY: 'auto', marginTop: 6, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}
+            >
+              {hiddenList.map((p) => (
+                <div
+                  key={p.packPath}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderBottom: '1px solid var(--border)' }}
+                >
+                  <span
+                    className="text-muted"
+                    style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    title={p.packName}
+                  >
+                    {p.packName}
+                  </span>
+                  <button className="btn btn-ghost btn-sm" onClick={() => onUnhide(p.packPath)}>
+                    Unhide
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
         <span className="text-faint" style={{ fontSize: 12 }}>

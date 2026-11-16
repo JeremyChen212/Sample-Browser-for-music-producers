@@ -40,9 +40,11 @@ export function CategoryFilterBar({
   const present = CATEGORY_ORDER.filter((c) => (counts.get(c) ?? 0) > 0)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '2px 0 12px', minWidth: 0 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', alignItems: 'center', gap: 8 }}>
-        <span className="section-label">Sound type</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '0 0 12px', minWidth: 0 }}>
+      {/* Top edge sits at 0 with a 28px label row — matches the sidebar's
+          column-head so "Session packs · 3" and "Sound type" share a line. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', alignItems: 'start', gap: 8 }}>
+        <span className="section-label column-head">Sound type</span>
         <div className="chip-row" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <button className={`chip${!activeCategory ? ' is-selected' : ''}`} onClick={() => onSelectCategory(undefined)}>
             All

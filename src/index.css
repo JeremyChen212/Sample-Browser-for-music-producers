@@ -400,3 +400,200 @@ input {
 .chip-row .chip {
   white-space: nowrap;
 }
+
+/* ===== workflow-improvements branch additions ===== */
+
+/* Shared column header row: the sidebar's "Session packs · N" and the
+   results column's "Sound type" both use this, so they sit on one line
+   across the divider. 28px = the height of one row of filter chips. */
+.column-head {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
+.chip {
+  min-height: 28px;
+}
+.chip-sm {
+  min-height: 24px;
+  padding: 2px 9px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Breadcrumb + result count, on one quiet line above the list. */
+.count-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 12px;
+  margin: 0 0 8px;
+  min-height: 20px;
+}
+.crumb {
+  background: none;
+  border: none;
+  padding: 1px 2px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.crumb:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+.crumb.is-current {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Pack rows: the ⋯ button only appears on hover/focus so 400 rows don't
+   each carry a visible icon — but it's always there to find. */
+.tree-item .pack-more-btn {
+  opacity: 0;
+}
+.tree-item.is-pack-root:hover .pack-more-btn,
+.tree-item .pack-more-btn:focus-visible {
+  opacity: 1;
+}
+
+.tag-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Context / ⋯ menu */
+.pack-menu-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 8px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--surface-alt);
+  outline: none;
+}
+.menu-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+.menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+.color-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.color-swatch.is-selected {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface) inset;
+}
+
+/* Session menu rows: click to open, hover reveals rename / delete. */
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-sm);
+  padding: 2px 4px 2px 0;
+}
+.session-row:hover {
+  background: var(--surface-alt);
+}
+.session-row.is-active {
+  background: var(--accent-soft);
+}
+.session-row-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+}
+.session-row.is-active .session-row-main {
+  color: var(--accent-strong);
+}
+.session-row-count {
+  font-size: 11px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.session-row-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+.session-row:hover .session-row-actions,
+.session-row:focus-within .session-row-actions {
+  display: flex;
+}
+.session-row:hover .session-row-count {
+  display: none;
+}
+
+/* Undo toast */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--text);
+  color: white;
+  font-size: 13px;
+  padding: 9px 10px 9px 16px;
+  border-radius: 999px;
+  box-shadow: var(--shadow-md);
+  z-index: 40;
+}
+.toast-undo {
+  color: #cfe0cc;
+}
+.toast-undo:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+}
