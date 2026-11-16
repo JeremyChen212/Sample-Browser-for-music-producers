@@ -9,7 +9,6 @@ import { PackTreeSidebar } from './components/PackTreeSidebar'
 import { CategoryFilterBar } from './components/CategoryFilterBar'
 import { SessionBar } from './components/SessionBar'
 import { PackMenu } from './components/PackMenu'
-import { TriedTray } from './components/TriedTray'
 import { ProjectsSidebar } from './components/ProjectsSidebar'
 import { ArrowLeftIcon, BrandMark, ChevronIcon, FolderIcon, PencilIcon, SearchIcon, ShuffleIcon } from './components/Icon'
 
@@ -411,19 +410,9 @@ export default function App() {
               onRemovePin={lib.removePin}
               onDragged={lib.recordDrag}
             />
-            <TriedTray
-              tried={lib.tried}
-              samplesById={lib.samplesById}
-              playingId={playingId}
-              pinned={lib.pinned}
-              inProject={lib.inProject}
-              linked={Boolean(lib.projectStatus && !lib.projectStatus.error)}
-              onPlay={play}
-              onStop={stop}
-              onPin={lib.togglePin}
-              onRemove={lib.removeTried}
-              onDragged={lib.recordDrag}
-            />
+            {/* The "Tried" row that used to sit here was removed: the Projects
+                tab now shows each beat's In project + tried samples in one
+                place, so a second summary row under Pinned was redundant. */}
           </div>
 
           <div style={{ height: 1, background: 'var(--border)', margin: '4px 0 12px', flexShrink: 0 }} />
